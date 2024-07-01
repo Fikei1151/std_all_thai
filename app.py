@@ -6,10 +6,10 @@ import plotly.express as px
 import requests
 import dash_bootstrap_components as dbc
 
-# Load the data
+
 df = pd.read_csv('graduates_m6_2566.csv')
 
-# Mapping dictionary from Thai to English province names
+
 province_mapping = {
     'กระบี่': 'Krabi',
     'กรุงเทพมหานคร': 'Bangkok Metropolis',
@@ -90,17 +90,13 @@ province_mapping = {
     'แม่ฮ่องสอน': 'Mae Hong Son'
 }
 
-# Replace Thai province names with English names
 df['schools_province'] = df['schools_province'].map(province_mapping)
 
-# Add a column to highlight Narathiwat
 df['highlight'] = df['schools_province'].apply(lambda x: 'highlight' if x == 'Narathiwat' else 'normal')
 
-# Load the GeoJSON file for Thailand provinces
 geojson_url = 'https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json'
 geojson_data = requests.get(geojson_url).json()
 
-# Create the Dash app with Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.config.suppress_callback_exceptions = True
 
@@ -146,12 +142,13 @@ app.layout = dbc.Container([
             html.Label("เลือกจังหวัด:"),
             dcc.Dropdown(
                 id='province-dropdown',
-                options=[{'label': province, 'value': province} for province in df['schools_province'].unique()],
+                options=[{'label': province, 'value': province} for province in df['schools_province'].unique()] + [{'label': 'ทั้งหมด', 'value': 'all'}],
                 value='Narathiwat',  # Default value to Narathiwat
                 placeholder="เลือกจังหวัด"
             ),
-            html.Div(id='province-info')
-        ], width=6)
+            html.Div(id='province-info'),
+        ], width=6),
+        dbc.Col(dcc.Graph(id="bar-chart"), width=6)
     ]),
     dbc.Row([
         dbc.Col([
@@ -181,23 +178,50 @@ def toggle_theme(light_clicks, dark_clicks):
         class_name = 'dark-mode'
     return create_choropleth(theme), class_name
 
-# Callback to update province information
+# Callback to update province information and bar chart
 @app.callback(
-    Output('province-info', 'children'),
+    [Output('province-info', 'children'), Output('bar-chart', 'figure')],
     [Input('province-dropdown', 'value')]
 )
-def update_province_info(selected_province):
+def update_province_info_and_bar_chart(selected_province):
     if selected_province is None:
-        return "กรุณาเลือกจังหวัด"
-    province_data = df[df['schools_province'] == selected_province].iloc[0]
-    return html.Div([
-        html.H3(f"ข้อมูลจังหวัด: {selected_province}"),
-        html.P(f"จำนวนนักเรียนทั้งหมด: {province_data['totalstd']}"),
-        html.P(f"จำนวนนักเรียนชาย: {province_data['totalmale']}"),
-        html.P(f"จำนวนนักเรียนหญิง: {province_data['totalfemale']}")
-    ])
+        return "กรุณาเลือกจังหวัด", dash.no_update
 
-# Add CSS for dark mode
+    if selected_province == 'all':
+        province_data = df
+    else:
+        province_data = df[df['schools_province'] == selected_province]
+
+    if selected_province == 'all':
+        bar_fig = px.bar(
+            province_data,
+            x='schools_province',
+            y=['totalmale', 'totalfemale'],
+            labels={'variable': 'Gender', 'value': 'Count'},
+            title='Gender Distribution in All Provinces'
+        )
+    else:
+        bar_fig = px.bar(
+            pd.DataFrame({
+                'Gender': ['Total Male', 'Total Female'],
+                'Count': [province_data['totalmale'].values[0], province_data['totalfemale'].values[0]]
+            }),
+            x='Gender',
+            y='Count',
+            title=f'Gender Distribution in {selected_province}'
+        )
+
+    if selected_province == 'all':
+        return "ข้อมูลทุกจังหวัด", bar_fig
+    else:
+        return html.Div([
+            html.H3(f"ข้อมูลจังหวัด: {selected_province}"),
+            html.P(f"จำนวนนักเรียนทั้งหมด: {province_data['totalstd'].values[0]}"),
+            html.P(f"จำนวนนักเรียนชาย: {province_data['totalmale'].values[0]}"),
+            html.P(f"จำนวนนักเรียนหญิง: {province_data['totalfemale'].values[0]}")
+        ]), bar_fig
+
+
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -230,6 +254,5 @@ app.index_string = '''
 </html>
 '''
 
-# Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
