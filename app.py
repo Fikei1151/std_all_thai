@@ -93,6 +93,9 @@ province_mapping = {
 # Replace Thai province names with English names
 df['schools_province'] = df['schools_province'].map(province_mapping)
 
+# Add a column to highlight Narathiwat
+df['highlight'] = df['schools_province'].apply(lambda x: 'highlight' if x == 'Narathiwat' else 'normal')
+
 # Load the GeoJSON file for Thailand provinces
 geojson_url = 'https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json'
 geojson_data = requests.get(geojson_url).json()
@@ -113,7 +116,19 @@ def create_choropleth(theme):
         hover_data=['totalmale', 'totalfemale'],
         title='จำนวนนักเรียนที่จบการศึกษาระดับ ม.6 ปี 2567 แยกตามจังหวัด',
         labels={'totalstd': 'Total Students', 'totalmale': 'Total Male', 'totalfemale': 'Total Female'},
-        template=theme
+        template=theme,
+        color_continuous_scale=px.colors.sequential.Blues
+    )
+    # Highlight Narathiwat
+    fig.update_traces(marker_line_width=2)
+    fig.add_choropleth(
+        geojson=geojson_data,
+        locations=['Narathiwat'],
+        z=[1],
+        featureidkey='properties.name',
+        colorscale=[[0, 'red'], [1, 'red']],
+        showscale=False,
+        marker=dict(line=dict(width=2, color='darkred'))
     )
     fig.update_geos(fitbounds="locations", visible=False)
     return fig
@@ -124,7 +139,7 @@ app.layout = dbc.Container([
         dbc.Col(html.H1("จำนวนนักเรียนที่จบการศึกษาระดับ ม.6 ปี 2567 แยกตามจังหวัด"), width=12)
     ]),
     dbc.Row([
-        dbc.Col(dcc.Graph(id="map"), width=12)
+        dbc.Col(dcc.Graph(id="map", figure=create_choropleth('plotly_white')), width=12)
     ]),
     dbc.Row([
         dbc.Col([
@@ -132,7 +147,7 @@ app.layout = dbc.Container([
             dcc.Dropdown(
                 id='province-dropdown',
                 options=[{'label': province, 'value': province} for province in df['schools_province'].unique()],
-                value=None,
+                value='Narathiwat',  # Default value to Narathiwat
                 placeholder="เลือกจังหวัด"
             ),
             html.Div(id='province-info')
